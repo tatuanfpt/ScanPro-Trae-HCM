@@ -1,3 +1,10 @@
+//
+//  AppDelegate.swift
+//  QuickScanPro
+//
+//  Created by TuanTa on 22/11/25.
+//
+
 import UIKit
 
 @main
@@ -14,3 +21,5 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didDiscardSceneSessions sceneSessions: Set<UISceneSession>) {
     }
 }
+
+

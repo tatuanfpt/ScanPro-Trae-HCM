@@ -11,6 +11,7 @@ final class ScannerViewController: UIViewController {
     private var captureSession: AVCaptureSession?
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private let output = AVCapturePhotoOutput()
+    private let sessionQueue = DispatchQueue(label: "camera.session")
     
     private let cameraPreview = UIView()
     private let captureButton = UIButton(type: .system)
@@ -132,38 +133,51 @@ final class ScannerViewController: UIViewController {
     }
     
     private func setupCamera() {
+        #if targetEnvironment(simulator) || targetEnvironment(macCatalyst)
+        statusLabel.text = "Simulator detected – pick an image from Photos"
+        captureButton.setImage(UIImage(systemName: "photo.fill.on.rectangle.fill"), for: .normal)
+        #else
         let session = AVCaptureSession()
         session.sessionPreset = .photo
-        
-        guard let device = AVCaptureDevice.default(for: .video),
-              let input = try? AVCaptureDeviceInput(device: device) else {
-            showCameraError()
-            return
-        }
-        
-        if session.canAddInput(input) {
-            session.addInput(input)
-        }
-        
-        if session.canAddOutput(output) {
-            session.addOutput(output)
-        }
-        
-        let previewLayer = AVCaptureVideoPreviewLayer(session: session)
-        previewLayer.frame = cameraPreview.bounds
-        previewLayer.videoGravity = .resizeAspectFill
-        cameraPreview.layer.addSublayer(previewLayer)
-        self.previewLayer = previewLayer
-        
         captureSession = session
+        
+        sessionQueue.async { [weak self] in
+            guard let self = self else { return }
+            guard let device = AVCaptureDevice.default(for: .video),
+                  let input = try? AVCaptureDeviceInput(device: device) else {
+                DispatchQueue.main.async { self.showCameraError() }
+                return
+            }
+            
+            if session.canAddInput(input) {
+                session.addInput(input)
+            }
+            
+            if session.canAddOutput(self.output) {
+                session.addOutput(self.output)
+            }
+            
+            DispatchQueue.main.async {
+                let previewLayer = AVCaptureVideoPreviewLayer(session: session)
+                previewLayer.frame = self.cameraPreview.bounds
+                previewLayer.videoGravity = .resizeAspectFill
+                self.cameraPreview.layer.addSublayer(previewLayer)
+                self.previewLayer = previewLayer
+            }
+        }
+        #endif
     }
     
     private func startCameraSession() {
-        captureSession?.startRunning()
+        sessionQueue.async { [weak self] in
+            self?.captureSession?.startRunning()
+        }
     }
     
     private func stopCameraSession() {
-        captureSession?.stopRunning()
+        sessionQueue.async { [weak self] in
+            self?.captureSession?.stopRunning()
+        }
     }
     
     private func bindViewModel() {
@@ -216,12 +230,16 @@ final class ScannerViewController: UIViewController {
     }
     
     @objc private func captureButtonTapped() {
+        #if targetEnvironment(simulator) || targetEnvironment(macCatalyst)
+        openPhotoLibrary()
+        #else
         let settings = AVCapturePhotoSettings()
         settings.flashMode = .auto
         output.capturePhoto(with: settings, delegate: self)
         
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
+        #endif
     }
     
     @objc private func recentScansTapped() {
@@ -265,6 +283,13 @@ final class ScannerViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }
+
+    private func openPhotoLibrary() {
+        let picker = UIImagePickerController()
+        picker.sourceType = .photoLibrary
+        picker.delegate = self
+        present(picker, animated: true)
+    }
 }
 
 extension ScannerViewController: AVCapturePhotoCaptureDelegate {
@@ -281,5 +306,18 @@ extension ScannerViewController: AVCapturePhotoCaptureDelegate {
         }
         
         viewModel.processCapturedImage(image)
+    }
+}
+
+extension ScannerViewController: UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+        picker.dismiss(animated: true)
+    }
+    
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+        picker.dismiss(animated: true)
+        if let image = info[.originalImage] as? UIImage {
+            viewModel.processCapturedImage(image)
+        }
     }
 }

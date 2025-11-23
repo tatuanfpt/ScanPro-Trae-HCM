@@ -38,7 +38,7 @@ final class ScannerViewModel: ScannerViewModelProtocol {
         
         let startTime = CFAbsoluteTimeGetCurrent()
         
-        textRecognizer.recognizeText(from: image) { [weak self] result in
+        textRecognizer.recognizeText(from: image) { [weak self] (result: Result<String, Error>) in
             guard let self = self else { return }
             
             let processingTime = CFAbsoluteTimeGetCurrent() - startTime
@@ -79,7 +79,9 @@ final class ScannerViewModel: ScannerViewModelProtocol {
         
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
            let rootViewController = windowScene.windows.first?.rootViewController {
-            rootViewController.present(activityController, animated: true)
+            DispatchQueue.main.async {
+                rootViewController.present(activityController, animated: true)
+            }
         }
     }
     
